@@ -1,0 +1,157 @@
+---
+title: "Machinelearning"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+
+
+data.train<- read.csv("C:\\Users\\CT\\Desktop\\Machine Learning\\pml-training.csv", na.strings = c("NA", "#DIV/0!", ""))
+
+data.test<- read.csv("C:\\Users\\CT\\Desktop\\Machine Learning\\pml-testing.csv", na.strings = c("NA", "#DIV/0!", ""))
+
+```
+
+Data Understandaing:
+
+```{r}
+dim(data.train)
+
+```
+Data Transformation : Convert date and add new variable (Day)
+
+```{r}
+data.train$cvtd_timestamp<- as.Date(data.train$cvtd_timestamp, format = "%m/%d/%Y %H:%M")
+data.train$Day<-factor(weekdays(data.train$cvtd_timestamp)) #Add day variable
+
+```
+
+Exploratory Data Analysis
+
+```{r}
+table(data.train$classe) 
+
+```
+
+```{r}
+prop.table(table(data.train$classe))
+
+```
+
+```{r}
+prop.table(table(data.train$user_name)) 
+
+
+```
+
+```{r}
+prop.table(table(data.train$user_name,data.train$classe),1) 
+
+```
+
+```{r}
+prop.table(table(data.train$user_name,data.train$classe),2) 
+```
+
+```{r}
+prop.table(table(data.train$classe, data.train$Day),1) 
+```
+
+```{r}
+qplot(x=Day, fill=classe, data = data.train)
+```
+
+Data Cleaning:
+```{r}
+#### Remove columns with NA missing values
+data.train <- data.train[, colSums(is.na(data.train)) == 0]
+data.test <- data.test[, colSums(is.na(data.test)) == 0] 
+
+#### Remove columns that are not relevant to accelerometer measurements.
+classe<- data.train$classe
+trainRemove<- grepl("^X|timestamp|window", names(data.train))
+data.train<- data.train[, !trainRemove]
+trainCleaned<- data.train[, sapply(data.train, is.numeric)]
+trainCleaned$classe<- classe
+testRemove<- grepl("^X|timestamp|window", names(data.test))
+data.test<- data.test[, !testRemove]
+testCleaned<- data.test[, sapply(data.test, is.numeric)]
+```
+Now, the cleaned data contains 19622 observations and 53 variables for both train and test datasets
+
+Create Train and Test data sets:
+
+
+```{r}
+set.seed(22519)
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+
+```
+
+Data Modelling:
+
+```{r}
+controlRf <- trainControl(method="cv", 5)
+rfmod<- train(classe ~., data=trainData, method="rf", trControl=controlRf, importance=TRUE, ntree=100)
+rfmod
+
+```
+
+Accuacy of the model on Validation data set:
+
+```{r}
+predictRfmod<- predict(rfmod, testData)
+confusionMatrix(testData$classe, predictRfmod)
+
+```
+
+```{r}
+accuracy <- postResample(predictRfmod, testData$classe)
+accuracy
+
+```
+
+```{r}
+Error <- 1 - as.numeric(confusionMatrix(testData$classe, predictRfmod)$overall[1])
+Error
+```
+
+So, the estimated accuracy of the model is 99.32% and the estimated out-of-sample error is 0.68%.
+
+Predicting on Test Data Set
+
+```{r}
+result <- predict(rfmod, testCleaned[, -length(names(testCleaned))])
+result
+
+```
+
+
+Correlation Matrix
+
+```{r}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="circle")
+
+
+```
+Tree Visualization
+
+```{r}
+rtree<- rpart(classe ~ ., data=trainData, method="class")
+prp(rtree)
+```
